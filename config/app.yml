@@ -1,0 +1,5 @@
+sessions_secret: 58SVJpzdHWBBSnaxxqGK9FDhQn1S9JoDBVwl8dr8WsM=
+postgres:
+  url: "postgresql://username:password@host/database"
+admins:
+  - dan@memfault.com
