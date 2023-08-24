@@ -1,5 +1,0 @@
-sessions_secret: 58SVJpzdHWBBSnaxxqGK9FDhQn1S9JoDBVwl8dr8WsM=
-postgres:
-  url: "postgresql://postgres:bdd37784b58a9255@srv-captain--trotto-postgres/postgres"
-admins:
-  - dan@memfault.com
