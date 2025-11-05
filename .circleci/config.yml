@@ -46,20 +46,13 @@ run_e2e_tests: &run_e2e_tests
         yarn playwright install &&
         yarn test
 jobs:
-  build_and_deploy:
+  build:
     docker:
       - image: cimg/python:3.9-browsers
     steps:
       - checkout
       - run: sh .circleci/set_env_vars.sh
-      # install gcloud
-      - run: curl -o $HOME/google-cloud-cli-412.0.0-linux-x86_64.tar.gz https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-412.0.0-linux-x86_64.tar.gz
-      - run: tar zxf $HOME/google-cloud-cli-412.0.0-linux-x86_64.tar.gz -C $HOME
-      - run: CLOUDSDK_CORE_DISABLE_PROMPTS=1 $HOME/google-cloud-sdk/install.sh
-      - run: echo 'source ${HOME}/google-cloud-sdk/path.bash.inc' >> $BASH_ENV
-      - run: gcloud components update
       - <<: *install_postgres
-      # install deps locally to enable unit testing
       - run:
           name: Create Python virtual env for use with all commands
           command: |
@@ -69,9 +62,58 @@ jobs:
       - run: python3 get-pip.py
       - run: pip install -r ${SERVER_CODE_ROOT}/src/requirements.txt
       - run: pip install -r ${SERVER_CODE_ROOT}/dev_requirements.txt
-      # Retrieve our secrets from the CircleCI environment
-      - run: echo $APP_YML_BASE64 | base64 --decode > ${SERVER_SRC_ROOT}/config/app.yml
-      - run: echo $CLIENT_SECRETS_BASE64 | base64 --decode > ${SERVER_SRC_ROOT}/config/client_secrets.json
+      - run: |
+          # Create minimal app.yml for CI tests
+          cat > ${SERVER_SRC_ROOT}/config/app.yml << EOF
+          sessions_secret: ci_test_secret_key_for_flask_sessions
+          postgres:
+            url: postgresql://circleci@localhost:5432/postgres
+          testing:
+            domains:
+              - test.trotto.dev
+              - ci.trotto.dev
+            secret: ci_test_secret_for_jwt_signing
+          EOF
+      - run: cp ${SERVER_SRC_ROOT}/local/client_secrets_local_only.json ${SERVER_SRC_ROOT}/config/client_secrets.json
+      - run: export ENVIRONMENT=test_env
+      - run: cd ${SERVER_CODE_ROOT} && bash run_tests/run.sh
+      - <<: *install_node_tooling
+      - <<: *build_frontend
+      - <<: *run_e2e_tests
+  deploy:
+    docker:
+      - image: cimg/python:3.9-browsers
+    steps:
+      - checkout
+      - run: sh .circleci/set_env_vars.sh
+      - run: curl -o $HOME/google-cloud-cli-412.0.0-linux-x86_64.tar.gz https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-412.0.0-linux-x86_64.tar.gz
+      - run: tar zxf $HOME/google-cloud-cli-412.0.0-linux-x86_64.tar.gz -C $HOME
+      - run: CLOUDSDK_CORE_DISABLE_PROMPTS=1 $HOME/google-cloud-sdk/install.sh
+      - run: echo 'source ${HOME}/google-cloud-sdk/path.bash.inc' >> $BASH_ENV
+      - run: gcloud components update
+      - <<: *install_postgres
+      - run:
+          name: Create Python virtual env for use with all commands
+          command: |
+            python3 -m venv venv
+            echo "source $(pwd)/venv/bin/activate" >> $BASH_ENV
+      - run: curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+      - run: python3 get-pip.py
+      - run: pip install -r ${SERVER_CODE_ROOT}/src/requirements.txt
+      - run: pip install -r ${SERVER_CODE_ROOT}/dev_requirements.txt
+      - run: |
+          # Create minimal app.yml for CI tests
+          cat > ${SERVER_SRC_ROOT}/config/app.yml << EOF
+          sessions_secret: ci_test_secret_key_for_flask_sessions
+          postgres:
+            url: postgresql://circleci@localhost:5432/postgres
+          testing:
+            domains:
+              - test.trotto.dev
+              - ci.trotto.dev
+            secret: ci_test_secret_for_jwt_signing
+          EOF
+      - run: cp ${SERVER_SRC_ROOT}/local/client_secrets_local_only.json ${SERVER_SRC_ROOT}/config/client_secrets.json
       # Deployment service account needs these roles:
       # - App Engine Deployer (to deploy new versions)
       # - App Engine Service Admin (to change versions)
@@ -79,19 +121,20 @@ jobs:
       # - Storage Object Creator (to upload app files)
       # - Storage Object Viewer (to list app files)
       - run: echo $DEPLOYER_CLIENT_SECRETS | base64 --decode > ${HOME}/deployer_client_secrets.json
-      - run: cd ${SERVER_CODE_ROOT} && bash run_tests/run.sh
       - <<: *install_node_tooling
       - run: gcloud auth activate-service-account --key-file ${HOME}/deployer_client_secrets.json
       - run: gcloud config set project $GCLOUD_PROJECT
       - run: gcloud app deploy --no-promote --project $GCLOUD_PROJECT -q -v $NEW_TROTTO_VERSION_ID ${SERVER_SRC_ROOT}/app.yaml ${SERVER_SRC_ROOT}/index.yaml
       - <<: *run_e2e_tests
       - run: gcloud app deploy --promote --project $GCLOUD_PROJECT -q -v $NEW_TROTTO_VERSION_ID ${SERVER_SRC_ROOT}/app.yaml ${SERVER_SRC_ROOT}/index.yaml
-# TODO: Split into build/test and deploy jobs (latter is the only job that needs gcloud/deployment creds).
 workflows:
   version: 2
   build_and_deploy:
     jobs:
-      - build_and_deploy:
+      - build
+      - deploy:
           filters:
             branches:
               only: master
+          requires:
+            - build
