@@ -14,6 +14,35 @@ import { InfoBox } from './InfoBox'
 import { LinkActions } from './LinkActions'
 import {VisibilityOffOutlined} from "@mui/icons-material";
 
+const formatLastVisited = (dateString?: string): string | null => {
+  if (!dateString) return null
+  
+  try {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+    
+    if (diffInSeconds < 60) return 'just now'
+    if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60)
+      return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`
+    }
+    if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600)
+      return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+    }
+    if (diffInSeconds < 604800) {
+      const days = Math.floor(diffInSeconds / 86400)
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`
+    }
+    
+    // For longer periods, show the date
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })
+  } catch {
+    return null
+  }
+}
+
 interface Props {
   link: ILink
   sx?: BoxProps['sx']
@@ -21,9 +50,11 @@ interface Props {
 
 export const LinkItem: FC<Props> = ({ link, sx }) => {
   const { user } = useContext(Context)
-  const { id, destination_url, owner, visits_count, shortpath, unlisted } = link
+  const { id, destination_url, owner, visits_count, shortpath, unlisted, visits_count_last_updated } = link
   const fullShortPath = useFullShortPath(link)
-  const { isManaged, baseUrl, isExtensionInstalled } = useTrotto()
+  const { baseUrl, isExtensionInstalled } = useTrotto()
+  
+  const lastVisitedText = useMemo(() => formatLastVisited(visits_count_last_updated), [visits_count_last_updated])
 
   const [transferModal, openTransferModal, closeTransferModal] = useModal()
   const [deleteModal, openDeleteModal, closeDeleteModal] = useModal()
@@ -106,8 +137,18 @@ export const LinkItem: FC<Props> = ({ link, sx }) => {
           )}
           <div />
           <InfoBox sx={{ ml: 1 }}>{owner}</InfoBox>
-          {isManaged && (
-            <InfoBox>
+          <InfoBox>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: 0.5,
+                [media.TABLET]: {
+                  alignItems: 'flex-end',
+                },
+              }}
+            >
               <Box
                 sx={{
                   display: 'flex',
@@ -141,8 +182,21 @@ export const LinkItem: FC<Props> = ({ link, sx }) => {
                   <Eye />
                 </Box>
               </Box>
-            </InfoBox>
-          )}
+              {lastVisitedText && (
+                <Box
+                  sx={{
+                    fontSize: '0.75rem',
+                    color: 'text.secondary',
+                    [media.TABLET]: {
+                      fontSize: '0.875rem',
+                    },
+                  }}
+                >
+                  {lastVisitedText}
+                </Box>
+              )}
+            </Box>
+          </InfoBox>
           <LinkActions
             disabled={!canEdit}
             onTransfer={openTransferModal}
@@ -160,8 +214,6 @@ export const LinkItem: FC<Props> = ({ link, sx }) => {
 }
 
 export const LinkItemDummy: FC = () => {
-  const { isManaged } = useTrotto()
-
   return (
     <>
       <Box
@@ -187,9 +239,7 @@ export const LinkItemDummy: FC = () => {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: isManaged
-              ? '1fr 2fr 1fr 1fr max-content'
-              : '1fr 2fr 1fr max-content',
+            gridTemplateColumns: 'max-content auto auto 1fr minmax(68px, max-content) max-content auto',
             alignItems: 'center',
           }}
         >
@@ -204,8 +254,10 @@ export const LinkItemDummy: FC = () => {
             bold
           />
           <div />
+          <div />
+          <div />
           <InfoBox sx={{ ml: 1 }} />
-          {isManaged && <InfoBox />}
+          <InfoBox />
           <SvgIcon />
         </Box>
         <Box
