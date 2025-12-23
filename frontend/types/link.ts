@@ -10,6 +10,7 @@ export interface Link {
   type?: string
   visits_count: number
   unlisted: boolean
+  visits_count_last_updated?: string
 }
 
 export interface LinkCreateResponse extends Link {

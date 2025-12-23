@@ -28,7 +28,7 @@ models = get_models('links')
 
 
 PUBLIC_KEYS = ['id', 'created', 'modified', 'owner', 'namespace',
-               'shortpath', 'destination_url', 'type', 'visits_count', 'unlisted']
+               'shortpath', 'destination_url', 'type', 'visits_count', 'unlisted', 'visits_count_last_updated']
 
 
 def get_field_conversion_fns():
@@ -37,7 +37,8 @@ def get_field_conversion_fns():
     'visits_count': (lambda count: count or 0),
     'created': (lambda created: str(created).split('+')[0]),
     'modified': (lambda created: str(created).split('+')[0]),
-    'unlisted': (lambda unlisted: bool(unlisted))
+    'unlisted': (lambda unlisted: bool(unlisted)),
+    'visits_count_last_updated': (lambda dt: str(dt).split('+')[0] if dt else None)
   }
 
 
