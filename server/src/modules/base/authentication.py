@@ -123,6 +123,17 @@ def login(authentication_method, user_id=None, user_email=None, user_org=None):
 
 
 def validate_user_authentication():
+  # Check for oauth2-proxy authentication header if user is not authenticated
+  if not current_user.is_authenticated:
+    email_header = request.headers.get('X-Auth-Request-Email')
+    if email_header:
+      user_email = email_header.lower().strip()
+      if user_email and '@' in user_email:
+        try:
+          login('oauth2_proxy', user_email=user_email)
+        except Exception as e:
+          logging.error('Failed to auto-login via oauth2-proxy header: %s', e)
+  
   if current_user and getattr(current_user, 'enabled', None) is False:
     return redirect('/_/auth/login?e=account_disabled')
 
