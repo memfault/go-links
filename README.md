@@ -35,9 +35,11 @@ For a full list of Trotto's features, check out https://www.trot.to/how-it-works
 
 ## Authentication
 
-At the moment, the open-source app solely supports authentication using a Google account,
-but we plan to add support for additional identity providers upon request. So if you need support
-for another provider, submit a GitHub issue, and we'll help you out!
+The open-source app supports:
+- Google OAuth (built-in)
+- OAuth2-proxy for external identity providers like Microsoft Entra ID, Okta, etc.
+
+For oauth2-proxy setup, see `.env.template` and `docker-compose.yaml` for configuration examples.
 
 ## Deploy the app
 

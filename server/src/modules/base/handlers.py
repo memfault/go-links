@@ -19,6 +19,29 @@ LOGIN_METHODS = [{'label': 'Sign in with Google',
                  ] + (get_config_by_key_path(['authentication', 'methods']) or [])
 
 
+def handle_oauth2_proxy_auth():
+  """Handle authentication via oauth2-proxy reverse proxy headers.
+  
+  oauth2-proxy sets X-Auth-Request-Email header when a user is authenticated.
+  This function checks for that header and logs in the user automatically.
+  """
+  email_header = request.headers.get('X-Auth-Request-Email')
+  
+  if not email_header:
+    return False
+  
+  user_email = email_header.lower().strip()
+  
+  if not user_email or '@' not in user_email:
+    logging.warning('Invalid email from oauth2-proxy header: %s', email_header)
+    return False
+  
+  # oauth2-proxy has already verified the email with the identity provider
+  authentication.login('oauth2_proxy', user_email=user_email)
+  
+  return True
+
+
 routes = Blueprint('base', __name__,
                    template_folder='../../static/templates')
 
@@ -49,6 +72,10 @@ def get_google_login_url(oauth_redirect_uri=None, redirect_to_after_oauth=None):
 @routes.route('/_/auth/login')
 def login():
   if current_user.is_authenticated:
+    return redirect('/')
+  
+  # Check if user is authenticated via oauth2-proxy
+  if handle_oauth2_proxy_auth():
     return redirect('/')
 
   redirect_to = authentication.get_host_for_request(request)
@@ -85,7 +112,10 @@ def login():
 def logout():
   logout_user()
 
-  return redirect('http://localhost:5007/' if request.host.startswith('localhost') else '/')
+  # If using oauth2-proxy, redirect to its sign_out endpoint to clear its session
+  # oauth2-proxy will then redirect back to the home page
+  redirect_url = 'http://localhost:5007/' if request.host.startswith('localhost') else '/'
+  return redirect(f'/oauth2/sign_out?rd={redirect_url}')
 
 
 @routes.route('/_/auth/login/google')
