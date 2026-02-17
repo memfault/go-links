@@ -34,7 +34,7 @@ services:
       - --cookie-httponly=true
       - --cookie-samesite=lax
       - --cookie-expire=720h
-      - --cookie-refresh=1h
+      - --cookie-refresh=0        # Disable refresh checks - rely on cookie expiry only
 
       # Pass authentication headers to Trotto
       - --pass-access-token=true
