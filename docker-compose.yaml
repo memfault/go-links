@@ -1,0 +1,116 @@
+version: "3.8"
+
+# ===========================================================================
+# Trotto Go-Links with oauth2-proxy for External OAuth Providers
+# Example configuration for deploying with oauth2-proxy reverse proxy
+# ===========================================================================
+
+services:
+  # oauth2-proxy - handles external OAuth authentication
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    restart: unless-stopped
+
+    command:
+      # Provider configuration
+      - --provider=oidc
+      - --provider-display-name=${OAUTH2_PROVIDER_DISPLAY_NAME:-OAuth}
+      - --client-id=${OAUTH2_CLIENT_ID}
+      - --client-secret=${OAUTH2_CLIENT_SECRET}
+      - --oidc-issuer-url=https://login.microsoftonline.com/${OAUTH2_TENANT_ID}/v2.0
+      - --redirect-url=${OAUTH2_REDIRECT_URL}
+
+      # Upstream - proxy authenticated requests to Trotto
+      - --upstream=http://trotto:8000
+      - --http-address=0.0.0.0:4180
+
+      # Email domain restriction (optional)
+      - --email-domain=${OAUTH2_EMAIL_DOMAIN}
+
+      # Cookie configuration
+      - --cookie-name=_oauth2_proxy
+      - --cookie-secret=${OAUTH2_COOKIE_SECRET}
+      - --cookie-secure=true
+      - --cookie-httponly=true
+      - --cookie-samesite=lax
+      - --cookie-expire=720h
+      - --cookie-refresh=0        # Disable refresh checks - rely on cookie expiry only
+
+      # Pass authentication headers to Trotto
+      - --pass-access-token=true
+      - --pass-user-headers=true
+      - --pass-authorization-header=true
+      - --set-xauthrequest=true
+
+      # Proxy settings
+      - --reverse-proxy=true
+      - --skip-provider-button=false
+      - --skip-auth-preflight=true
+
+      # Logging
+      - --auth-logging=true
+      - --request-logging=true
+      - --standard-logging=true
+
+      # Security
+      - --session-store-type=cookie
+
+    environment:
+      OAUTH2_CLIENT_ID: ${OAUTH2_CLIENT_ID}
+      OAUTH2_CLIENT_SECRET: ${OAUTH2_CLIENT_SECRET}
+      OAUTH2_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET}
+      OAUTH2_TENANT_ID: ${OAUTH2_TENANT_ID}
+      OAUTH2_REDIRECT_URL: ${OAUTH2_REDIRECT_URL}
+      OAUTH2_EMAIL_DOMAIN: ${OAUTH2_EMAIL_DOMAIN}
+      OAUTH2_PROVIDER_DISPLAY_NAME: ${OAUTH2_PROVIDER_DISPLAY_NAME:-OAuth}
+      # Used in Traefik labels below
+      DOMAIN: ${DOMAIN}
+
+    # Expose port for Traefik routing (don't use ports: which bypasses proxy)
+    expose:
+      - "4180"
+
+    networks:
+      - coolify
+      - default
+
+    depends_on:
+      - trotto
+
+    # Disable healthcheck - let Traefik route regardless
+    healthcheck:
+      disable: true
+
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180"
+
+  # Trotto (go-links) service
+  trotto:
+    build: .
+    restart: unless-stopped
+
+    environment:
+      # Database configuration
+
+      # Optional: Trotto configuration
+      TROTTO_CONFIG: ${TROTTO_CONFIG}
+
+    # Only expose internally - all public traffic goes through oauth2-proxy
+    expose:
+      - "8000"
+
+    networks:
+      - default
+
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/_/opensearch"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 40s
+
+networks:
+  coolify:
+    external: true

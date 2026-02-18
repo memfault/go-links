@@ -123,6 +123,21 @@ def login(authentication_method, user_id=None, user_email=None, user_org=None):
 
 
 def validate_user_authentication():
+  # Check for oauth2-proxy authentication header if user is not authenticated
+  if not current_user.is_authenticated:
+    email_header = request.headers.get('X-Forwarded-Email')
+    if email_header:
+      user_email = email_header.lower().strip()
+      if user_email and '@' in user_email:
+        try:
+          # Directly log in the user, bypassing authentication method checks
+          # oauth2-proxy has already validated the user's identity
+          user = get_or_create_user(user_email, get_organization_id_for_email(user_email))
+          login_user(user)
+          session['last_signin'] = datetime.datetime.utcnow()
+        except Exception as e:
+          logging.error('Failed to auto-login via oauth2-proxy header: %s', e)
+  
   if current_user and getattr(current_user, 'enabled', None) is False:
     return redirect('/_/auth/login?e=account_disabled')
 
